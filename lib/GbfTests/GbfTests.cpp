@@ -5,7 +5,8 @@
 
 #include "GbfTests.h"
 #include "GbfSignal.h"
-#include "GbfAffichage.h"
+#include "GbfIhm.h"
+#include "GbfMiseEnPage.h"
 #include "GbfSerie.h"
 #include <math.h>
 #include <string.h>
@@ -19,6 +20,9 @@
 #define FREQUENCE_TEST_HORS_LIMITE_HZ   2500U
 #define AMPLITUDE_TEST_800_MV           800U
 #define OFFSET_TEST_1650_MV             1650U
+#define OFFSET_TEST_ECRETAGE_HAUT_MV    2800U
+#define TENSION_ATTENDUE_BASSE_MV       600U
+#define TENSION_ATTENDUE_HAUTE_MV       2600U
 
 /**************************************************************************
  * @brief Teste la fonction convertirMillivoltsEnCodeDac (cas nominaux, limites et hors bornes).
@@ -138,7 +142,7 @@ static bool testerCalculTimer(void) {
 }
 
 /**************************************************************************
- * @brief Teste la machine à états IHM et les transitions de paramètres.
+ * @brief Teste la machine à états IHM, l'écrêtage, les libellés et la sélection tactile.
  * 
  * @return true si tous les cas de test passent, false sinon
  */
@@ -181,6 +185,45 @@ static bool testerMachineEtatsIhm(void) {
         return false;
     }
     if (calculerNouvelleFrequenceParPas(10U, false) != 9U) {
+        return false;
+    }
+
+    // Détection d'écrêtage et calcul des tensions extrêmes Vmin / Vmax
+    uint16_t vMin = 0U;
+    uint16_t vMax = 0U;
+    if (estSignalEcrete(&params)) {
+        return false;
+    }
+    if (!calculerTensionsExtremes(&params, &vMin, &vMax) ||
+        vMin != TENSION_ATTENDUE_BASSE_MV || vMax != TENSION_ATTENDUE_HAUTE_MV) {
+        return false;
+    }
+
+    params.offsetMv = OFFSET_TEST_ECRETAGE_HAUT_MV;
+    if (!estSignalEcrete(&params)) {
+        return false;
+    }
+    if (!calculerTensionsExtremes(&params, &vMin, &vMax) || vMax != (uint16_t)TENSION_DAC_MAX_MV) {
+        return false;
+    }
+
+    // Formatage de la période et des libellés de touches contextuelles
+    char tamponTexte[TAILLE_LIBELLE_MAX];
+    if (!formaterPeriode(100U, tamponTexte, sizeof(tamponTexte)) || formaterPeriode(0U, tamponTexte, sizeof(tamponTexte))) {
+        return false;
+    }
+    if (!formaterLibelleTouche(&params, true, tamponTexte, sizeof(tamponTexte))) {
+        return false;
+    }
+
+    // Sélection tactile d'une carte et bascule en mode consultation au second toucher
+    EtatIhm_t nouvelEtat = ETAT_IHM_CONSULTATION;
+    if (!determinerEtatDepuisToucher(POS_X_CARTES + 10, POS_Y_PREMIERE_CARTE + 10, ETAT_IHM_CONSULTATION, &nouvelEtat) ||
+        nouvelEtat != ETAT_IHM_REGLAGE_FORME) {
+        return false;
+    }
+    if (!determinerEtatDepuisToucher(POS_X_CARTES + 10, POS_Y_PREMIERE_CARTE + 10, ETAT_IHM_REGLAGE_FORME, &nouvelEtat) ||
+        nouvelEtat != ETAT_IHM_CONSULTATION) {
         return false;
     }
 

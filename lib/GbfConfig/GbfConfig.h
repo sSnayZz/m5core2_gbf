@@ -86,37 +86,14 @@
 #define DUREE_VIBRATION_LONGUE_MS       150U
 
 // ============================================================================
-// CONSTANTES D'AFFICHAGE LCD (MAQUETTE IHM 320x240)
+// CONSTANTES GENERALES DE L'IHM
+// (la mise en page détaillée de l'écran est définie dans GbfAffichage.h)
 // ============================================================================
 #define LARGEUR_ECRAN_PX                320
 #define HAUTEUR_ECRAN_PX                240
-
-#define HAUTEUR_ICONES_PX               50
-#define LARGEUR_ICONES_PX               64
-#define POS_X_ICONE_MENU                20
-#define POS_X_ICONE_MOINS               128
-#define POS_X_ICONE_PLUS                230
-
-#define HAUTEUR_BANDEAU_TITRE_PX        26
-#define POS_Y_TEXTE_TITRE               13
-#define POS_X_CENTRE_ECRAN              160
-
-#define POS_X_COLONNE_PARAMS            8
-#define LARGEUR_COLONNE_PARAMS_PX       192
-#define POS_Y_DEBUT_LIGNES_PARAMS       30
-#define HAUTEUR_LIGNE_PARAM_PX          38
-#define DECALAGE_Y_TEXTE_LIGNE_PX       19
-
-#define POS_X_CADRE_OSCILLO             206
-#define POS_Y_CADRE_OSCILLO             32
-#define LARGEUR_CADRE_OSCILLO_PX        108
-#define HAUTEUR_CADRE_OSCILLO_PX        148
-#define MARGE_INTERNE_OSCILLO_PX        4
-
-#define TAILLE_POLICE_NORMALE           1
-#define TAILLE_POLICE_GRANDE            2
-#define NUMERO_POLICE_LCD               2
-#define TAILLE_TEXTE_LIGNE_MAX          32U
+#define NB_ETATS_IHM                    5U
+#define NB_PARAMETRES_REGLABLES         4U
+#define TAILLE_LIBELLE_MAX              24U
 
 // ============================================================================
 // TYPES ENUMERES
@@ -155,7 +132,8 @@ typedef enum {
     CMD_SERIE_FIXER_FREQUENCE = 5,  /**< Fixe directement la fréquence en Hz */
     CMD_SERIE_FIXER_AMPLITUDE = 6,  /**< Fixe directement l'amplitude en mV */
     CMD_SERIE_FIXER_OFFSET = 7,     /**< Fixe directement l'offset en mV */
-    CMD_SERIE_DEMANDER_ETAT = 8     /**< Demande l'envoi de l'état courant sur le port série */
+    CMD_SERIE_DEMANDER_ETAT = 8,    /**< Demande l'envoi de l'état courant sur le port série */
+    CMD_IHM_SELECTIONNER = 9        /**< Sélection directe d'un état IHM (toucher sur l'écran) */
 } TypeCommandeGbf_t;
 
 // ============================================================================

@@ -5,14 +5,17 @@
  *          Architecture multi-tâches FreeRTOS :
  *          - Génération de signaux Sinus, Carré, Triangle et Dent de scie (1 Hz à 1,5 kHz)
  *            sur la sortie analogique GPIO26 (DAC_CHANNEL_2) via interruption Timer 0.
- *          - Réglage complet (Forme, Fréquence, Amplitude, Offset) par les 3 boutons
- *            et par protocole série à 115200 bauds avec accusé de réception.
+ *          - Réglage complet (Forme, Fréquence, Amplitude, Offset) par les 3 boutons,
+ *            par sélection tactile directe des cartes sur l'écran et par protocole série
+ *            à 115200 bauds avec accusé de réception.
+ *          - Affichage double-bufferisé sans scintillement via sprite M5Canvas.
  *          - Communication inter-tâches par files (QueueHandle_t) et protection série par Mutex.
  */
 
 #include <M5Unified.h>
 #include "GbfConfig.h"
 #include "GbfSignal.h"
+#include "GbfIhm.h"
 #include "GbfAffichage.h"
 #include "GbfSerie.h"
 #include "GbfTests.h"
@@ -62,7 +65,7 @@ void setup(void) {
 
     fileInterruptSerie = contexteRtos.queueReceptionSerie;
 
-    // Initialisation du générateur de signal matériel et de l'affichage initial
+    // Initialisation du générateur de signal matériel et envoi de l'état initial à l'écran
     ParametresGbf_t parametresInitiaux;
     reinitialiserParametresParDefaut(&parametresInitiaux);
 
@@ -71,8 +74,7 @@ void setup(void) {
         return;
     }
 
-    afficherIconesBoutons();
-    afficherEcranCompletGbf(&parametresInitiaux);
+    xQueueSendToBack(contexteRtos.queueAffichageLcd, (const void *)&parametresInitiaux, 0U);
 
     // Exécution des tests unitaires au démarrage (Charte §7)
     executerTousLesTestsUnitairesGbf(contexteRtos.mutexPortSerie);
@@ -204,7 +206,8 @@ void taskTraiteTrame(void *pvParameters) {
 }
 
 /**************************************************************************
- * @brief Tâche FreeRTOS de scrutation des 3 boutons tactiles capacitifs (BtnA, BtnB, BtnC).
+ * @brief Tâche FreeRTOS de scrutation des 3 boutons tactiles (BtnA, BtnB, BtnC)
+ *        et de la sélection directe par toucher sur les cartes de l'écran.
  * 
  * @param pvParameters : Pointeur vers la structure ContexteRtosGbf_t
  */
@@ -215,6 +218,7 @@ void taskBoutonsIhm(void *pvParameters) {
     }
 
     ContexteRtosGbf_t *contexte = (ContexteRtosGbf_t *)pvParameters;
+    EtatIhm_t dernierEtatTactile = ETAT_IHM_CONSULTATION;
 
     for (;;) {
         M5.update();
@@ -222,25 +226,38 @@ void taskBoutonsIhm(void *pvParameters) {
         CommandeGbf_t commandeBouton;
         commandeBouton.valeurParametre = 0U;
         commandeBouton.depuisPortSerie = false;
-        bool boutonActionne = false;
+        bool actionDetectee = false;
         uint32_t dureeVibrationMs = DUREE_VIBRATION_COURTE_MS;
 
         if (M5.BtnA.wasHold()) {
             commandeBouton.typeCommande = CMD_IHM_REINITIALISER;
+            dernierEtatTactile = ETAT_IHM_CONSULTATION;
             dureeVibrationMs = DUREE_VIBRATION_LONGUE_MS;
-            boutonActionne = true;
+            actionDetectee = true;
         } else if (M5.BtnA.wasClicked()) {
             commandeBouton.typeCommande = CMD_IHM_BOUTON_MENU;
-            boutonActionne = true;
+            dernierEtatTactile = obtenirEtatIhmSuivant(dernierEtatTactile);
+            actionDetectee = true;
         } else if (M5.BtnB.wasClicked()) {
             commandeBouton.typeCommande = CMD_IHM_BOUTON_MOINS;
-            boutonActionne = true;
+            actionDetectee = true;
         } else if (M5.BtnC.wasClicked()) {
             commandeBouton.typeCommande = CMD_IHM_BOUTON_PLUS;
-            boutonActionne = true;
+            actionDetectee = true;
+        } else if (M5.Touch.getCount() > 0U) {
+            const auto &detailToucher = M5.Touch.getDetail();
+            if (detailToucher.wasPressed() && detailToucher.y < POS_Y_TOUCHES) {
+                EtatIhm_t etatCible = ETAT_IHM_CONSULTATION;
+                if (determinerEtatDepuisToucher(detailToucher.x, detailToucher.y, dernierEtatTactile, &etatCible)) {
+                    commandeBouton.typeCommande = CMD_IHM_SELECTIONNER;
+                    commandeBouton.valeurParametre = (uint16_t)etatCible;
+                    dernierEtatTactile = etatCible;
+                    actionDetectee = true;
+                }
+            }
         }
 
-        if (boutonActionne) {
+        if (actionDetectee) {
             xQueueSendToBack(contexte->queueCommandesGbf, (const void *)&commandeBouton, portMAX_DELAY);
             emettreVibrationBouton(INTENSITE_VIBRATION_COURTE, dureeVibrationMs);
         }
@@ -292,7 +309,7 @@ void taskControleurGbf(void *pvParameters) {
 }
 
 /**************************************************************************
- * @brief Tâche FreeRTOS dédiée au rafraîchissement de l'écran LCD 320x240.
+ * @brief Tâche FreeRTOS dédiée au rafraîchissement de l'écran LCD 320x240 via M5Canvas.
  * 
  * @param pvParameters : Pointeur vers la structure ContexteRtosGbf_t
  */
@@ -303,11 +320,19 @@ void taskAffichageLcd(void *pvParameters) {
     }
 
     ContexteRtosGbf_t *contexte = (ContexteRtosGbf_t *)pvParameters;
+    M5Canvas canvasEcran(&M5.Display);
+
+    if (!initialiserAffichage(&canvasEcran)) {
+        envoyerMessageSerieProtege(contexte->mutexPortSerie, "ERREUR CRITIQUE : Echec allocation M5Canvas !");
+        vTaskDelete(nullptr);
+        return;
+    }
+
     ParametresGbf_t parametresAAfficher;
 
     for (;;) {
         if (xQueueReceive(contexte->queueAffichageLcd, (void *)&parametresAAfficher, portMAX_DELAY) == pdTRUE) {
-            afficherEcranCompletGbf(&parametresAAfficher);
+            afficherEcranCompletGbf(&canvasEcran, &parametresAAfficher);
         }
     }
 }

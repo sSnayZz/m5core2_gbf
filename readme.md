@@ -16,7 +16,7 @@ Ce projet implémente un **Générateur Basses Fréquences (GBF)** complet sur c
 - **Amplitude crête réglable** : De **$100\text{ mV}$ ($0{,}10\text{ V}$) à $1\,600\text{ mV}$ ($1{,}60\text{ V}$)** par pas de $100\text{ mV}$ (soit jusqu'à $3{,}20\text{ V}_{\text{càc}}$).
 - **Offset réglable** : De **$0\text{ mV}$ ($0{,}00\text{ V}$) à $3\,300\text{ mV}$ ($3{,}30\text{ V}$)** par pas de $100\text{ mV}$, avec écrêtage numérique automatique dans la plage $[0\text{ mV} \,;\, 3\,300\text{ mV}]$ du CNA.
 - **Double interface de commande** :
-  1. **Locale** : Via les **3 boutons tactiles capacitifs** (`BtnA` Menu / Reset, `BtnB` Moins, `BtnC` Plus) avec retour haptique (vibreur) et affichage sur l'écran LCD $320 \times 240$ incluant un **mini-oscilloscope temps réel**.
+  1. **Locale** : Via les **3 boutons tactiles capacitifs** (`BtnA` Menu / Reset, `BtnB` Moins, `BtnC` Plus), le **toucher direct des cartes sur l'écran tactile** avec retour haptique (vibreur) et un affichage double-bufferisé (`M5Canvas`) sur l'écran LCD $320 \times 240$ incluant 4 cartes à jauges, un **oscilloscope 2 périodes avec alerte d'écrêtage** et des touches logicielles contextuelles.
   2. **Distante** : Via le **port série USB ($115\,200\text{ bauds}$)** par fonction de callback (`Serial.onReceive`), décodage par automate à états finis et **réponse de confirmation** protégée par **Mutex FreeRTOS**.
 
 ### Organisation modulaire des fichiers (Charte §4)
@@ -26,17 +26,21 @@ m5core2_gbf/
 ├── platformio.ini                   # Configuration PlatformIO (M5Stack Core 2, M5Unified, 115200 bauds)
 ├── readme.md                        # Documentation complète (IHM, Diagrammes, Protocole, Tests)
 ├── docs/
-│   └── maquette_ihm.png             # Visuel de la maquette IHM (5 écrans et transitions)
+│   └── maquette_ihm.png             # Visuel de la maquette IHM enrichie (5 écrans et transitions)
 ├── lib/
 │   ├── GbfConfig/
 │   │   └── GbfConfig.h              # Constantes MAJUSCULES, énumérations et structures FreeRTOS
 │   ├── GbfSignal/
 │   │   ├── GbfSignal.h              # Interface de synthèse numérique, CNA (GPIO26) et Timer 0
 │   │   └── GbfSignal.cpp            # Implémentation des tables d'ondes et de l'ISR Timer en IRAM
+│   ├── GbfIhm/
+│   │   ├── GbfMiseEnPage.h          # Coordonnées géométriques partagées (rendu LCD & détection tactile)
+│   │   ├── GbfIhm.h                 # Interface de la logique IHM pure (testable sur PC sans matériel)
+│   │   └── GbfIhm.cpp               # Machine à états IHM, détection d'écrêtage, période, libellés
 │   ├── GbfAffichage/
-│   │   ├── icons.h                  # Icônes XBM 64x50 des 3 boutons (menu_bits, down_bits, up_bits)
-│   │   ├── GbfAffichage.h           # Interface d'affichage LCD et machine à états de l'IHM
-│   │   └── GbfAffichage.cpp         # Rendu LCD sans scintillement, mini-oscilloscope et états IHM
+│   │   ├── icons.h                  # Icônes XBM 64x50 de référence
+│   │   ├── GbfAffichage.h           # Palette RGB565, polices et interface de rendu par sprite M5Canvas
+│   │   └── GbfAffichage.cpp         # Rendu double-bufferisé (bandeau, 4 cartes, oscillo, touches)
 │   ├── GbfSerie/
 │   │   ├── GbfSerie.h               # Interface du protocole série et de l'automate décodeur
 │   │   └── GbfSerie.cpp             # Décodage de trames sans Regex et envoi protégé par Mutex
@@ -49,22 +53,28 @@ m5core2_gbf/
 
 ### Conformité à la Charte de Qualité du Code
 1. **Nommage des variables (§1)** : Notation `camelCase` commençant par une minuscule de manière constante dans tout le projet (`frequenceHz`, `amplitudeMv`, `offsetMv`, `formeSignal`, `etatCourant`, `queueCommandesGbf`). Aucun accent ni caractère spécial.
-2. **Absence de variables globales applicatives (§1.1)** : L'état du GBF (`ParametresGbf_t`) est une variable locale appartenant exclusivement à la tâche `taskControleurGbf`. Les handles FreeRTOS (`QueueHandle_t`, `SemaphoreHandle_t`) sont regroupés dans une structure `ContexteRtosGbf_t` transmise aux tâches via le pointeur `pvParameters`. Seuls le double-buffer de l'ISR matérielle (`GbfSignal.cpp`) et le handle de file du callback série (`main.cpp`) ont une portée statique limitée à leur fichier (`static`), car les signatures matérielles `void IRAM_ATTR isr(void)` et `Serial.onReceive(void(*)(void))` n'acceptent aucun paramètre utilisateur.
-3. **Constantes (§2)** : Toutes les valeurs numériques (bornes, pas, tailles de piles, priorités, coordonnées LCD, couleurs, diviseur Timer) sont définies par des constantes en `MAJUSCULES_AVEC_UNDERSCORE` dans `GbfConfig.h` et `GbfAffichage.h`.
+2. **Absence de variables globales applicatives (§1.1)** : L'état du GBF (`ParametresGbf_t`) est une variable locale appartenant exclusivement à la tâche `taskControleurGbf`, et le sprite plein écran `M5Canvas` est une variable locale à `taskAffichageLcd`. Les handles FreeRTOS (`QueueHandle_t`, `SemaphoreHandle_t`) sont regroupés dans une structure `ContexteRtosGbf_t` transmise aux tâches via le pointeur `pvParameters`. Seuls le double-buffer de l'ISR matérielle (`GbfSignal.cpp`) et le handle de file du callback série (`main.cpp`) ont une portée statique limitée à leur fichier (`static`), car les signatures matérielles `void IRAM_ATTR isr(void)` et `Serial.onReceive(void(*)(void))` n'acceptent aucun paramètre utilisateur.
+3. **Constantes (§2)** : Toutes les valeurs numériques (bornes, pas, tailles de piles, priorités, coordonnées LCD, couleurs, diviseur Timer) sont définies par des constantes en `MAJUSCULES_AVEC_UNDERSCORES` dans `GbfConfig.h`, `GbfMiseEnPage.h` et `GbfAffichage.h`.
 4. **Commentaires Doxygen (§5)** : Chaque fichier, structure, énumération et fonction possède un en-tête complet au format Javadoc/Doxygen (`@file`, `@brief`, `@param`, `@return`).
-5. **Gestion des erreurs (§6)** : Vérification systématique des pointeurs `nullptr`, des retours de création FreeRTOS (`xQueueCreate`, `xSemaphoreCreateMutex`, `xTaskCreatePinnedToCore`), des retours matériels (`dac_output_enable`, `timerBegin`) et saturation des valeurs numériques.
+5. **Gestion des erreurs (§6)** : Vérification systématique des pointeurs `nullptr`, des retours de création FreeRTOS (`xQueueCreate`, `xSemaphoreCreateMutex`, `xTaskCreatePinnedToCore`), de l'allocation du sprite `M5Canvas`, des retours matériels (`dac_output_enable`, `timerBegin`) et saturation des valeurs numériques.
 
 ---
 
 ## 2. Maquette IHM
 
-Conformément au § 5.3 du TP, l'interface graphique sur l'écran TFT $320 \times 240$ utilise les 3 boutons tactiles capacitifs du M5Stack Core 2 surmontés des icônes issues de `icons.h` :
-- **Bouton A (Gauche — Icône `Menu`)** :
-  - **Appui court** : Permet de faire défiler cycliquement le paramètre sélectionné (`Consultation` $\to$ `Forme` $\to$ `Fréquence` $\to$ `Amplitude` $\to$ `Offset` $\to$ `Consultation`). Le paramètre sélectionné apparaît sur fond jaune (`COULEUR_SELECTION`) avec texte noir (`COULEUR_TEXT_SELECT`).
-  - **Appui long (> 1 s)** : Restaure immédiatement les paramètres par défaut (`SINUS`, `100 Hz`, `1000 mV`, `1600 mV`) avec une vibration longue.
-- **Bouton B (Milieu — Icône `Moins`)** : Diminue la valeur du paramètre sélectionné (ou passe à la forme d'onde précédente). En mode `Consultation`, diminue directement la fréquence.
-- **Bouton C (Droite — Icône `Plus`)** : Augmente la valeur du paramètre sélectionné (ou passe à la forme d'onde suivante). En mode `Consultation`, augmente directement la fréquence.
-- **Zone droite de l'écran** : Affiche un **aperçu graphique temps réel (mini-oscilloscope)** représentant une période du signal avec son niveau d'offset (ligne verte) et son amplitude réelle (courbe cyan sur l'échelle $0\text{ V} - 3{,}3\text{ V}$).
+L'interface graphique sur l'écran TFT $320 \times 240$ est dessinée dans un **sprite plein écran (`M5Canvas`)** en mémoire PSRAM avant d'être transférée en une seule opération SPI (`pushSprite`), éliminant tout scintillement (*flickering*) :
+
+- **Bandeau d'état supérieur** : Affiche le mode actif (`CONSULTATION`, `REGLAGE FORME`, `REGLAGE FREQUENCE`, `REGLAGE AMPLITUDE`, `REGLAGE OFFSET`) et un **badge de santé du signal** en temps réel (`SORTIE OK` en vert, ou `ECRETAGE !` en rouge dès que $\text{Offset} \pm \text{Amplitude}$ dépasse la plage $[0\text{ V} \,;\, 3{,}3\text{ V}]$ du CNA).
+- **4 Cartes de paramètres interactives (colonne de gauche)** :
+  - Chaque carte présente le nom du paramètre, sa **valeur principale en gras** (`FreeSansBold9pt7b`), une **information secondaire** à droite (miniature de la forme d'onde, période $T$ calculée automatiquement, tension crête-à-crête $V_{\text{pp}}$, valeur en $\text{mV}$) et une **jauge de progression** en bas de carte.
+  - La carte sélectionnée passe en **surbrillance jaune (`COULEUR_SELECTION`) avec texte noir (`COULEUR_TEXTE_SELECTION`)**.
+  - **Sélection tactile directe** : En plus du bouton `Menu` (`BtnA`), l'utilisateur peut toucher directement une carte sur l'écran pour la sélectionner (ou toucher la carte active / l'oscilloscope pour revenir en mode `Consultation`).
+- **Oscilloscope temps réel sur 2 périodes (colonne de droite)** :
+  - Grille graduée de $0\text{ V}$ à $3\text{ V}$ avec divisions temporelles en pointillés et ligne d'offset continu en tirets verts.
+  - Tracé de **2 périodes complètes** de l'onde réelle : la courbe est **cyan (`COULEUR_ACCENT`)** en fonctionnement linéaire et devient automatiquement **rouge (`COULEUR_ALERTE`)** sur les crêtes écrêtées.
+  - Légende inférieure affichant l'excursion réelle $[V_{\min} \,..\, V_{\max}]$ générée sur `GPIO26`.
+- **Barre de 3 touches logicielles contextuelles (en bas, en face de `BtnA`, `BtnB`, `BtnC`)** :
+  - Affiche en temps réel l'effet exact du prochain appui sur chaque bouton : prochain état du menu (`-> FORME`, `-> FREQ`...), pas courant d'incrémentation/décrémentation (`-10 Hz` / `+100 Hz`, `-0.10 V` / `+0.10 V`, forme précédente/suivante) ou indication de butée (`MIN` / `MAX`).
 
 ![Maquette IHM du GBF](docs/maquette_ihm.png)
 
