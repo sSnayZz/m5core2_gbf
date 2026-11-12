@@ -79,6 +79,7 @@ L'interface graphique sur l'écran TFT $320 \times 240$ est dessinée dans un **
   - Légende inférieure affichant l'excursion réelle $[V_{\min} \,..\, V_{\max}]$ générée sur `GPIO26`.
 - **Barre de 3 touches logicielles contextuelles (en bas, en face de `BtnA`, `BtnB`, `BtnC`)** :
   - Affiche en temps réel l'effet exact du prochain appui sur chaque bouton : prochain état du menu (`-> FORME`, `-> FREQ`...), pas courant d'incrémentation/décrémentation (`-10 Hz` / `+100 Hz`, `-0.10 V` / `+0.10 V`, forme précédente/suivante) ou indication de butée (`MIN` / `MAX`).
+  - **Répétition automatique accélérée sur appui prolongé (`BtnB` / `BtnC`)** : Un appui court applique un seul pas avec retour haptique ; un maintien prolongé ($> 400\text{ ms}$) fait défiler automatiquement la valeur à $10\text{ pas/s}$ ($100\text{ ms}$), puis accélère à $25\text{ pas/s}$ ($40\text{ ms}$) après $1{,}5\text{ s}$ de maintien continu.
 
 ![Maquette IHM du GBF](docs/maquette_ihm.png)
 

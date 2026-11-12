@@ -227,6 +227,29 @@ static bool testerMachineEtatsIhm(void) {
         return false;
     }
 
+    // Auto-répétition sur maintien des boutons Moins / Plus (clic initial, attente 400 ms, cadence 100 ms puis 40 ms)
+    EtatAutoRepetition_t etatRep = {0U, 0U, false};
+    bool premierAppui = false;
+    if (evaluerRepetitionBouton(nullptr, true, 0U, &premierAppui)) {
+        return false;
+    }
+    // Front montant à t = 100 ms : déclenchement immédiat avec premierAppui = true
+    if (!evaluerRepetitionBouton(&etatRep, true, 100U, &premierAppui) || !premierAppui) {
+        return false;
+    }
+    // Maintien avant 400 ms (t = 300 ms, durée = 200 ms) : pas encore de répétition
+    if (evaluerRepetitionBouton(&etatRep, true, 300U, &premierAppui) || premierAppui) {
+        return false;
+    }
+    // Maintien à t = 500 ms (durée = 400 ms >= DELAI_AVANT_REPETITION_MS) : répétition déclenchée sans vibration
+    if (!evaluerRepetitionBouton(&etatRep, true, 500U, &premierAppui) || premierAppui) {
+        return false;
+    }
+    // Relâchement du bouton : réinitialise le maintien
+    if (evaluerRepetitionBouton(&etatRep, false, 520U, &premierAppui) || etatRep.enMaintien) {
+        return false;
+    }
+
     return true;
 }
 

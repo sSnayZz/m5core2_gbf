@@ -426,3 +426,54 @@ bool determinerEtatDepuisToucher(int32_t posX, int32_t posY, EtatIhm_t etatCoura
 
     return false;
 }
+
+/**************************************************************************
+ * @brief Évalue si un bouton (Moins ou Plus) doit envoyer un pas de réglage
+ *        lors d'un clic simple ou d'un appui prolongé (auto-répétition avec accélération).
+ *
+ * @param etatBouton : Pointeur vers l'état d'auto-répétition du bouton
+ * @param estAppuye : true si le bouton est actuellement maintenu (isPressed)
+ * @param tempsCourantMs : Horodatage courant en millisecondes (millis)
+ * @param estPremierAppui : Pointeur de sortie mis à true lors du front montant initial
+ * @return true si une commande de réglage (Moins ou Plus) doit être déclenchée
+ */
+bool evaluerRepetitionBouton(EtatAutoRepetition_t *etatBouton, bool estAppuye,
+                             uint32_t tempsCourantMs, bool *estPremierAppui) {
+    if (etatBouton == nullptr || estPremierAppui == nullptr) {
+        return false;
+    }
+
+    *estPremierAppui = false;
+
+    if (!estAppuye) {
+        etatBouton->enMaintien = false;
+        return false;
+    }
+
+    // Front montant : premier appui immédiat
+    if (!etatBouton->enMaintien) {
+        etatBouton->enMaintien = true;
+        etatBouton->debutAppuiMs = tempsCourantMs;
+        etatBouton->dernierPasMs = tempsCourantMs;
+        *estPremierAppui = true;
+        return true;
+    }
+
+    // Maintien prolongé : attente du délai initial avant d'auto-répéter
+    uint32_t dureeMaintienMs = tempsCourantMs - etatBouton->debutAppuiMs;
+    if (dureeMaintienMs < DELAI_AVANT_REPETITION_MS) {
+        return false;
+    }
+
+    // Sélection de la cadence normale (100 ms) ou accélérée (40 ms après 1,5 s)
+    uint32_t periodeRepetitionMs = (dureeMaintienMs >= DELAI_ACCELERATION_REPETITION_MS)
+                                   ? PERIODE_REPETITION_RAPIDE_MS
+                                   : PERIODE_REPETITION_NORMALE_MS;
+
+    if ((tempsCourantMs - etatBouton->dernierPasMs) >= periodeRepetitionMs) {
+        etatBouton->dernierPasMs = tempsCourantMs;
+        return true;
+    }
+
+    return false;
+}

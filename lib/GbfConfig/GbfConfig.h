@@ -80,10 +80,14 @@
 #define PRIORITE_TACHE_TRAITE_TRAME     3U
 #define PRIORITE_TACHE_CONTROLEUR_GBF   4U
 
-#define PERIODE_SCRUTATION_IHM_MS       20U
-#define INTENSITE_VIBRATION_COURTE      180U
-#define DUREE_VIBRATION_COURTE_MS       40U
-#define DUREE_VIBRATION_LONGUE_MS       150U
+#define PERIODE_SCRUTATION_IHM_MS           20U
+#define DELAI_AVANT_REPETITION_MS           400U
+#define DELAI_ACCELERATION_REPETITION_MS    1500U
+#define PERIODE_REPETITION_NORMALE_MS       100U
+#define PERIODE_REPETITION_RAPIDE_MS        40U
+#define INTENSITE_VIBRATION_COURTE          180U
+#define DUREE_VIBRATION_COURTE_MS           40U
+#define DUREE_VIBRATION_LONGUE_MS           150U
 
 // ============================================================================
 // CONSTANTES GENERALES DE L'IHM
@@ -170,3 +174,12 @@ typedef struct {
     QueueHandle_t queueAffichageLcd;    /**< File des états à afficher sur l'écran LCD */
     SemaphoreHandle_t mutexPortSerie;   /**< Mutex protégeant l'accès concurrent à Serial */
 } ContexteRtosGbf_t;
+
+/**
+ * @brief État interne du mécanisme d'auto-répétition pour un bouton maintenu appuyé.
+ */
+typedef struct {
+    uint32_t debutAppuiMs;  /**< Horodatage (ms) du début de l'appui continu */
+    uint32_t dernierPasMs;  /**< Horodatage (ms) du dernier pas envoyé */
+    bool enMaintien;        /**< true si le bouton est actuellement maintenu */
+} EtatAutoRepetition_t;

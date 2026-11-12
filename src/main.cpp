@@ -219,14 +219,26 @@ void taskBoutonsIhm(void *pvParameters) {
 
     ContexteRtosGbf_t *contexte = (ContexteRtosGbf_t *)pvParameters;
     EtatIhm_t dernierEtatTactile = ETAT_IHM_CONSULTATION;
+    EtatAutoRepetition_t etatRepetitionMoins = {0U, 0U, false};
+    EtatAutoRepetition_t etatRepetitionPlus = {0U, 0U, false};
 
     for (;;) {
         M5.update();
+        uint32_t tempsCourantMs = (uint32_t)millis();
+
+        bool premierAppuiMoins = false;
+        bool declencherMoins = evaluerRepetitionBouton(&etatRepetitionMoins, M5.BtnB.isPressed(),
+                                                       tempsCourantMs, &premierAppuiMoins);
+
+        bool premierAppuiPlus = false;
+        bool declencherPlus = evaluerRepetitionBouton(&etatRepetitionPlus, M5.BtnC.isPressed(),
+                                                      tempsCourantMs, &premierAppuiPlus);
 
         CommandeGbf_t commandeBouton;
         commandeBouton.valeurParametre = 0U;
         commandeBouton.depuisPortSerie = false;
         bool actionDetectee = false;
+        bool activerVibration = false;
         uint32_t dureeVibrationMs = DUREE_VIBRATION_COURTE_MS;
 
         if (M5.BtnA.wasHold()) {
@@ -234,16 +246,20 @@ void taskBoutonsIhm(void *pvParameters) {
             dernierEtatTactile = ETAT_IHM_CONSULTATION;
             dureeVibrationMs = DUREE_VIBRATION_LONGUE_MS;
             actionDetectee = true;
+            activerVibration = true;
         } else if (M5.BtnA.wasClicked()) {
             commandeBouton.typeCommande = CMD_IHM_BOUTON_MENU;
             dernierEtatTactile = obtenirEtatIhmSuivant(dernierEtatTactile);
             actionDetectee = true;
-        } else if (M5.BtnB.wasClicked()) {
+            activerVibration = true;
+        } else if (declencherMoins) {
             commandeBouton.typeCommande = CMD_IHM_BOUTON_MOINS;
             actionDetectee = true;
-        } else if (M5.BtnC.wasClicked()) {
+            activerVibration = premierAppuiMoins;
+        } else if (declencherPlus) {
             commandeBouton.typeCommande = CMD_IHM_BOUTON_PLUS;
             actionDetectee = true;
+            activerVibration = premierAppuiPlus;
         } else if (M5.Touch.getCount() > 0U) {
             const auto &detailToucher = M5.Touch.getDetail();
             if (detailToucher.wasPressed() && detailToucher.y < POS_Y_TOUCHES) {
@@ -253,13 +269,16 @@ void taskBoutonsIhm(void *pvParameters) {
                     commandeBouton.valeurParametre = (uint16_t)etatCible;
                     dernierEtatTactile = etatCible;
                     actionDetectee = true;
+                    activerVibration = true;
                 }
             }
         }
 
         if (actionDetectee) {
             xQueueSendToBack(contexte->queueCommandesGbf, (const void *)&commandeBouton, portMAX_DELAY);
-            emettreVibrationBouton(INTENSITE_VIBRATION_COURTE, dureeVibrationMs);
+            if (activerVibration) {
+                emettreVibrationBouton(INTENSITE_VIBRATION_COURTE, dureeVibrationMs);
+            }
         }
 
         vTaskDelay(pdMS_TO_TICKS(PERIODE_SCRUTATION_IHM_MS));

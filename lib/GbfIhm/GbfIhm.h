@@ -108,3 +108,16 @@ bool formaterPeriode(uint16_t frequenceHz, char *bufferPeriode, size_t tailleBuf
  * @return true si le toucher correspond à une zone active, false sinon (ou pointeur NULL)
  */
 bool determinerEtatDepuisToucher(int32_t posX, int32_t posY, EtatIhm_t etatCourant, EtatIhm_t *nouvelEtat);
+
+/**
+ * @brief Évalue si un bouton (Moins ou Plus) doit envoyer un pas de réglage
+ *        lors d'un clic simple ou d'un appui prolongé (auto-répétition avec accélération).
+ *
+ * @param etatBouton : Pointeur vers l'état d'auto-répétition du bouton
+ * @param estAppuye : true si le bouton est actuellement maintenu (isPressed)
+ * @param tempsCourantMs : Horodatage courant en millisecondes (millis)
+ * @param estPremierAppui : Pointeur de sortie mis à true lors du front montant initial
+ * @return true si une commande de réglage (Moins ou Plus) doit être déclenchée
+ */
+bool evaluerRepetitionBouton(EtatAutoRepetition_t *etatBouton, bool estAppuye,
+                             uint32_t tempsCourantMs, bool *estPremierAppui);
