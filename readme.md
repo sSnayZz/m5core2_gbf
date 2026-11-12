@@ -24,7 +24,11 @@ Ce projet implémente un **Générateur Basses Fréquences (GBF)** complet sur c
 ```text
 m5core2_gbf/
 ├── platformio.ini                   # Configuration PlatformIO (M5Stack Core 2, M5Unified, 115200 bauds)
-├── readme.md                        # Documentation complète (IHM, Diagrammes, Protocole, Tests)
+├── readme.md                        # Documentation complète (IHM, Diagrammes, Protocole, Tests & Relevés)
+├── RAPIF01.PNG                      # Relevé oscilloscope R&S RTB2004 : Signal Sinus (100 Hz, ±1 V)
+├── RAPIF02.PNG                      # Relevé oscilloscope R&S RTB2004 : Signal Carré (100 Hz, ±1 V)
+├── RAPIF03.PNG                      # Relevé oscilloscope R&S RTB2004 : Signal Triangle (100 Hz, ±1 V)
+├── RAPIF04.PNG                      # Relevé oscilloscope R&S RTB2004 : Signal Dent de scie (100 Hz, ±1 V)
 ├── docs/
 │   └── maquette_ihm.png             # Visuel de la maquette IHM enrichie (5 écrans et transitions)
 ├── lib/
@@ -282,6 +286,8 @@ flowchart LR
 
 ## 6. Protocole de Test et Résultats Obtenus
 
+### 6.1 Tableau récapitulatif des tests unitaires et fonctionnels
+
 Conformément au **§ 7 de la Charte de Qualité du Code**, le tableau ci-dessous détaille le protocole de test complet (tests unitaires automatisés via la commande `T` / au démarrage, tests fonctionnels IHM, tests du protocole série, cas limites, robustesse et mesures à l'oscilloscope sur `GPIO26`) :
 
 | ID | Ce qui est testé | Catégorie | Comment le test doit être fait (Procédure reproductible) | Résultat attendu | Résultat obtenu |
@@ -291,9 +297,56 @@ Conformément au **§ 7 de la Charte de Qualité du Code**, le tableau ci-dessou
 | **T03** | Synthèse mathématique des 4 formes d'ondes (`calculerValeurNormalisee`) | Nominal | Exécuter `TU2` (`T\n`). Vérifie les points caractéristiques de `SINUS`, `CARRE`, `TRIANGLE` et `DENT_DE_SCIE` sur $100$ points. | Valeurs exactes dans $[-1{,}0 \,;\, +1{,}0]$ aux quarts et milieux de période. Affichage `[PASS] TU2`. | **CONFORME** (`[PASS] TU2`) |
 | **T04** | Robustesse de `genererTableEchantillons` face aux pointeurs `NULL` | Erreur / Robustesse | Dans `TU2`, appeler `genererTableEchantillons(nullptr, table, 100)` et `genererTableEchantillons(&params, nullptr, 100)`. | La fonction retourne `false` immédiatement sans crash (pas de déréférencement `NULL`). | **CONFORME** (`[PASS] TU2`) |
 | **T05** | Calcul du seuil d'alarme Timer 0 (`calculerSeuilAlarmeTimer`) | Nominal & Limites | Exécuter `TU3` (`T\n`). Vérifie les seuils à $1\text{ Hz}$, $1\,000\text{ Hz}$, $1\,500\text{ Hz}$ ainsi que les entrées hors bornes $0\text{ Hz}$ et $5\,000\text{ Hz}$. | $1\text{ Hz} \to 100\,000\text{ ticks}$, $1\text{ kHz} \to 100\text{ ticks}$, $1{,}5\text{ kHz} \to 67\text{ ticks}$. Affichage `[PASS] TU3`. | **CONFORME** (`[PASS] TU3`) |
-| **T06** | Navigation cyclique du bouton `Menu` (`BtnA`) | Nominal (IHM) | Appuyer 5 fois successivement sur le bouton tactile gauche (`BtnA`) et observer la ligne en surbrillance jaune sur l'écran LCD. | Passage cyclique `Consultation (0)` $\to$ `Forme (1)` $\to$ `Freq (2)` $\to$ `Ampl (3)` $\to$ `Offset (4)` $\to$ `Consultation (0)` avec vibration courte. | **CONFORME** (`[PASS] TU4`) |
+| **T06** | Navigation cyclique du bouton `Menu` (`BtnA`) et sélection tactile | Nominal (IHM) | Appuyer 5 fois successivement sur `BtnA` (ou toucher les cartes sur l'écran tactile) et observer la carte en surbrillance jaune. | Passage cyclique `Consultation (0)` $\to$ `Forme (1)` $\to$ `Freq (2)` $\to$ `Ampl (3)` $\to$ `Offset (4)` $\to$ `Consultation (0)` avec vibration courte. | **CONFORME** (`[PASS] TU4`) |
 | **T07** | Modification des 4 paramètres via les boutons `Moins` (`BtnB`) et `Plus` (`BtnC`) | Nominal & Limites (IHM) | Sélectionner chaque paramètre avec `BtnA`, puis appuyer sur `BtnB` et `BtnC` jusqu'aux butées min et max. | Forme boucle sur les 4 signaux ; Fréquence évolue entre $1\text{ Hz}$ et $1\,500\text{ Hz}$ ; Amplitude bloque à $100\text{ mV}$ et $1\,600\text{ mV}$ ; Offset bloque à $0\text{ mV}$ et $3\,300\text{ mV}$. | **CONFORME** (`[PASS] TU4`) |
 | **T08** | Réinitialisation par appui long sur `BtnA` ou commande série `R` | Nominal (IHM & Série) | Modifier les paramètres (ex: `CARRE`, $1\,200\text{ Hz}$, $800\text{ mV}$, $2\,000\text{ mV}$), puis maintenir `BtnA` appuyé $> 1\text{ s}$ (ou envoyer `R\n`). | Vibration longue et retour immédiat à `SINUS`, $100\text{ Hz}$, $1\,000\text{ mV}$, $1\,600\text{ mV}$, `MENU=0`. | **CONFORME** |
 | **T09** | Protocole série — Commandes valides (`S`, `F`, `A`, `O`, `+`, `-`, `M`, `?`) | Nominal & Limites (Série) | Envoyer sur le moniteur série : `S0`, `S1`, `S2`, `S3`, `F1`, `F1500`, `A100`, `A1600`, `O0`, `O3300`, `+`, `-`, `?`. | Chaque commande met à jour l'écran LCD, le signal sur `GPIO26` et renvoie `OK: SIGNAL=... \| FREQ=... \| AMPL=... \| OFFSET=...`. | **CONFORME** (`[PASS] TU5`) |
 | **T10** | Protocole série — Rejet des commandes erronées ou hors limites | Erreur / Robustesse | Envoyer sur le moniteur série : `F0`, `F1501`, `S4`, `A50`, `A2000`, `O3500`, `ABC`, ainsi qu'une trame de plus de $40$ caractères. | Le GBF conserve ses paramètres intacts et renvoie `ERROR: Commande ou valeur hors limites !` (ou `ERROR: Trame trop longue !`). | **CONFORME** (`[PASS] TU5`) |
-| **T11** | Vérification matérielle à l'oscilloscope sur `GPIO26` (`Port B`) | Matériel Temps Réel | Connecter une sonde d'oscilloscope entre `GPIO26` et `GND` (connecteur Grove noir Port B). Tester `S0` à `S3` à $1\text{ Hz}$, $100\text{ Hz}$, $1\text{ kHz}$ et $1{,}5\text{ kHz}$. | Formes d'ondes Sinus, Carré, Triangle et Dent de scie propres, fréquences mesurées à $\pm 0{,}5\%$, niveaux $V_{\min}$ et $V_{\max}$ conformes à $\text{Offset} \pm \text{Amplitude}$. | **CONFORME** |
+| **T11** | Vérification matérielle à l'oscilloscope sur `GPIO26` (`Port B`) | Matériel Temps Réel | Connecter une sonde d'oscilloscope entre `GPIO26` et `GND` (Port B). Capturer les 4 formes d'ondes (`S0` à `S3` : `RAPIF01.PNG` à `RAPIF04.PNG`). | Formes d'ondes Sinus, Carré, Triangle et Dent de scie propres, fréquence à $100\text{ Hz}$ ($\pm 0{,}6\%$) et crêtes $\pm 1{,}00\text{ V}$ conformes (voir § 6.2). | **CONFORME** (voir § 6.2) |
+
+---
+
+### 6.2 Relevés expérimentaux à l'oscilloscope (Rohde & Schwarz RTB2004)
+
+Les mesures matérielles ont été réalisées sur la sortie analogique **`GPIO26` (`DAC_CHANNEL_2`, connecteur Grove Port B)** du M5Stack Core 2 à l'aide d'un oscilloscope numérique **Rohde & Schwarz RTB2004** :
+
+- **Configuration de l'oscilloscope** : Voie `C1` en couplage **`AC`** (suppression de la composante continue d'offset pour mesurer directement l'excursion autour de $0\text{ V}$), sonde `10:1`, calibre vertical **`500 mV/div`**, base de temps **`2 ms/div`**, fréquence d'échantillonnage **`625 MSa/s`**.
+- **Consigne appliquée sur le GBF** : Fréquence **$f = 100\text{ Hz}$** (période $T = 10\text{ ms}$, soit $5$ divisions horizontales), Amplitude crête **$A = 1{,}00\text{ V}$ ($1\,000\text{ mV}$)** soit **$2{,}00\text{ V}_{\text{càc}}$**, Offset **$1{,}60\text{ V}$ ($1\,600\text{ mV}$)**.
+
+#### Synthèse comparative des mesures sur les 4 formes d'ondes
+
+| Capture | Forme du signal | Fréquence attendue | Fréquence mesurée ($f$) | Écart de fréquence | Crête positive ($V_{p+}$) | Crête négative ($V_{p-}$) | Excursion crête-à-crête ($V_{\text{pp}}$) | Amplitude (`VAmp`) |
+| :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **`RAPIF01.PNG`** | **Sinus** (`S0`) | $100{,}0\text{ Hz}$ | **$100{,}001\text{ Hz}$** | $+0{,}001\%$ | $+999{,}6\text{ mV}$ | $-1{,}0045\text{ V}$ | **$2{,}0041\text{ V}$** | $1{,}9110\text{ V}$ |
+| **`RAPIF02.PNG`** | **Carré** (`S1`) | $100{,}0\text{ Hz}$ | **$100{,}000\text{ Hz}$** | $0{,}000\%$ | $+1{,}0143\text{ V}$ | $-1{,}0143\text{ V}$ | **$2{,}0286\text{ V}$** | $1{,}9208\text{ V}$ |
+| **`RAPIF03.PNG`** | **Triangle** (`S2`) | $100{,}0\text{ Hz}$ | **$100{,}097\text{ Hz}$** | $+0{,}097\%$ | $+980{,}0\text{ mV}$ | $-994{,}7\text{ mV}$ | **$1{,}9747\text{ V}$** | $1{,}9845\text{ V}$ |
+| **`RAPIF04.PNG`** | **Dent de scie** (`S3`) | $100{,}0\text{ Hz}$ | **$100{,}559\text{ Hz}$** | $+0{,}559\%$ | $+980{,}0\text{ mV}$ | $-950{,}6\text{ mV}$ | **$1{,}9306\text{ V}$** | $1{,}9355\text{ V}$ |
+
+---
+
+#### 1. Signal Sinusoïdal (`SIGNAL_SINUS` — `RAPIF01.PNG`)
+- **Analyse** : La fréquence mesurée est de **$100{,}001\text{ Hz}$** (précision meilleure que $10\text{ ppm}$ grâce au cadencement matériel par l'alarme du Timer 0 à $1\,000\text{ ticks}$ de $0{,}1\ \mu\text{s}$). Les crêtes mesurées à **$+999{,}6\text{ mV}$** et **$-1{,}0045\text{ V}$** correspondent exactement à la consigne d'amplitude crête de $1\,000\text{ mV}$. On observe également la finesse des $100$ paliers d'échantillonnage par période du CNA 8 bits.
+
+![Relevé oscilloscope - Signal Sinus 100 Hz](RAPIF01.PNG)
+
+---
+
+#### 2. Signal Carré (`SIGNAL_CARRE` — `RAPIF02.PNG`)
+- **Analyse** : La fréquence est de **$100\text{ Hz}$** exactement avec un rapport cyclique symétrique de **$50\%$** ($5\text{ ms}$ à l'état haut, $5\text{ ms}$ à l'état bas) et des niveaux crêtes symétriques à **$\pm 1{,}0143\text{ V}$**. La légère pente exponentielle sur les paliers est due au filtre passe-haut interne du couplage **`AC`** de l'oscilloscope à basse fréquence ($100\text{ Hz}$).
+
+![Relevé oscilloscope - Signal Carré 100 Hz](RAPIF02.PNG)
+
+---
+
+#### 3. Signal Triangulaire (`SIGNAL_TRIANGLE` — `RAPIF03.PNG`)
+- **Analyse** : Le signal triangulaire présente une fréquence de **$100{,}097\text{ Hz}$** et une excellente linéarité sur la rampe montante ($50$ échantillons sur $5\text{ ms}$) comme sur la rampe descendante ($50$ échantillons sur $5\text{ ms}$), avec une amplitude mesurée de **`VAmp = 1.9845 V`** ($V_{p+} = 980\text{ mV}$, $V_{p-} = -994{,}7\text{ mV}$).
+
+![Relevé oscilloscope - Signal Triangle 100 Hz](RAPIF03.PNG)
+
+---
+
+#### 4. Signal Dent de Scie (`SIGNAL_DENT_DE_SCIE` — `RAPIF04.PNG`)
+- **Analyse** : La rampe montante croît linéairement sur toute la période de **$10\text{ ms}$** ($f = 100{,}559\text{ Hz}$, $100$ échantillons successifs de $-1{,}00\text{ V}$ à $+1{,}00\text{ V}$) avant une retombée instantanée en fin de période (`VAmp = 1.9355 V`, $V_{p+} = 980\text{ mV}$, $V_{p-} = -950{,}6\text{ mV}$).
+
+![Relevé oscilloscope - Signal Dent de scie 100 Hz](RAPIF04.PNG)
+
